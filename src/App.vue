@@ -19,7 +19,7 @@ let dinoJumpSprite = null;
 
 onMounted(async () => {
   try {
-    preventZoom();
+    // preventZoom();
     // 初始化 Pixi 应用
     app = new PIXI.Application();
     await app.init({
@@ -32,16 +32,16 @@ onMounted(async () => {
 
     // 通过渲染器获取 canvas 元素
     if (app.renderer && app.renderer.canvas) {
-      console.log(app.screen);
-      console.log(window.innerHeight, window.innerWidth);
       // 将 canvas 添加到 Vue 组件的容器中
       pixiContainer.value.appendChild(app.renderer.canvas);
-      // 在 appendChild 后
+      // 在 appendChild 后设置正确的canvas样式，以适应resolution
       app.renderer.canvas.style.display = "block";
       app.renderer.canvas.style.position = "fixed";
       app.renderer.canvas.style.top = "0";
       app.renderer.canvas.style.left = "0";
-      console.log(pixiContainer.value)
+      app.renderer.canvas.style.width = "100%";
+      app.renderer.canvas.style.height = "100%";
+      app.renderer.canvas.style.objectFit = "contain";
       // 创建游戏的容器
       const container = new PIXI.Container();
       // 将容器添加到舞台
@@ -110,7 +110,7 @@ onMounted(async () => {
       // 创建文字
       startText = new PIXI.Text("点击开始游戏", {
         fontFamily: "Arial",
-        fontSize: 56,
+        fontSize: 33,
         fill: 0x333333,
         align: "center",
       });
@@ -189,7 +189,7 @@ onMounted(async () => {
               "最后得分：" + score + "。点击后重新开始",
               {
                 fontFamily: "Arial",
-                fontSize: 56,
+                fontSize: 33,
                 fill: 0x333333,
                 align: "center",
               }
@@ -209,7 +209,7 @@ onMounted(async () => {
 
       function gameOver() {
         isGameover = true;
-        window.alert("游戏失败");
+        app.ticker.stop();
       }
 
       window.addEventListener("keydown", (e) => {
@@ -231,83 +231,71 @@ onMounted(async () => {
 });
 
 function handleResize() {
-  if (app) {
-    app.renderer.resize(window.innerWidth, window.innerHeight);
-    const { width, height } = app.screen;
-    if (groundSprite) {
-      groundSprite.width = width;
-      groundSprite.position.set(0, height - 30);
-    }
-    if (cactusSprite) {
-      cactusSprite.x = width / 2;
-      cactusSprite.y = height - 50 - 30;
-    }
-    if (startText) {
-      startText.x = width / 2;
-      startText.y = height / 2;
-    }
-    if (dinoJumpSprite) {
-      dinoJumpSprite.y = height - 50 - 100;
-    }
-    if (runAnimation) {
-      runAnimation.y = height - 50 - 100;
-    }
+  console.log(window.visualViewport.scale);
+  // preventZoom();
+  const newWidth = window.innerWidth;
+  const newHeight = window.innerHeight;
+  app.renderer.resize(newWidth, newHeight);
+  // 确保 app.renderer.resize() 与 canvas 样式同步
+  app.renderer.canvas.style.width = `${newWidth}px`;
+  app.renderer.canvas.style.height = `${newHeight}px`;
+  if (groundSprite) {
+    groundSprite.position.set(0, newHeight - 30);
+  }
+  if (cactusSprite) {
+    cactusSprite.x = newWidth / 2;
+    cactusSprite.y = newHeight - 50 - 30;
+  }
+  if (startText) {
+    startText.x = newWidth / 2;
+    startText.y = newHeight / 2;
+  }
+  if (dinoJumpSprite) {
+    dinoJumpSprite.y = newHeight - 50 - 100;
+  }
+  if (runAnimation) {
+    runAnimation.y = newHeight - 50 - 100;
   }
 }
 
-// function preventZoom() {
-//   // 禁止Ctrl+滚轮缩放
-//   window.addEventListener('wheel', (e) => {
-//     if (e.ctrlKey) {
-//       e.preventDefault();
-//     }
-//   }, { passive: false });
-
-//   // 禁止Ctrl+ +/- 缩放
-//   window.addEventListener('keydown', (e) => {
-//     if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
-//       e.preventDefault();
-//     }
-//   }, { passive: false });
-
-//   // 禁止Ctrl+0 重置缩放
-//   window.addEventListener('keydown', (e) => {
-//     if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-//       e.preventDefault();
-//     }
-//   }, { passive: false });
-// }
-
-// function handleWheelZoom (e) {
-//   if (window.devicePixelRatio !== originalScale) {
-//     // 重置缩放比例
-//     document.body.style.zoom = '100%';
-//     // 触发重新适配
-//     handleResize();
-//   }
-// }
-
 function preventZoom() {
-  // 禁止 Ctrl + 滚轮
+  // 禁止Ctrl+滚轮缩放
   window.addEventListener(
     "wheel",
     (e) => {
-      if (e.ctrlKey) e.preventDefault();
+      if (e.ctrlKey) {
+        // 因为地面精灵图宽度有限，如果屏幕一直缩小，导致视宽变大，超出地面精灵图宽度将会导致地面过短，不符合设计
+        // 所以这里限制视宽不能大于地面精灵图宽度
+        // 视高不能小于690，否则会导致地面与中间文字重合，不符合设计
+        if (
+          window.innerWidth > groundSprite.width ||
+          window.innerHeight < 690
+        ) {
+          e.preventDefault();
+        }
+      }
     },
     { passive: false }
   );
 
-  // 禁止 Ctrl + +/-/0
+  // 禁止Ctrl+ +/- 缩放
   window.addEventListener(
     "keydown",
     (e) => {
-      if ((e.ctrlKey || e.metaKey) && ["+", "-", "=", "0"].includes(e.key)) {
-        e.preventDefault();
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "+" || e.key === "-" || e.key === "=")
+      ) {
+        if (window.innerWidth > 1545 || window.innerHeight < 690) {
+          e.preventDefault();
+        }
       }
     },
     { passive: false }
   );
 }
+
+
 
 onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
@@ -333,4 +321,3 @@ body {
   display: block;
 }
 </style>
-
